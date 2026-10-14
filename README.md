@@ -1,104 +1,61 @@
 # Triton-Lab
 
-Small, reproducible GPU-kernel experiments using **PyTorch** and **Triton**. The goal is to understand how GPU operations work, check correctness, measure performance, and explain the results.
+A small collection of GPU-kernel experiments focused on correctness, benchmarking, and understanding performance. The notebooks are meant to be run in order in Google Colab with a GPU runtime.
 
-This repository is a work in progress. A custom Triton kernel is not assumed to be faster than PyTorch; performance claims will be added only after benchmarking on a documented GPU runtime.
+This repository does **not** assume a custom kernel is faster than a framework implementation. Each comparison should be verified on the stated hardware and software versions.
 
-## Current experiment: vector addition
+## Notebooks
 
-Given two one-dimensional arrays, `x` and `y`, compute:
-
-```python
-out[i] = x[i] + y[i]
-```
-
-The experiment includes:
-
-- `src/triton_lab/vector_add.py` — the Triton kernel and a small Python wrapper.
-- `benchmarks/bench_vector_add.py` — correctness checking and a PyTorch-versus-Triton benchmark.
-- `notebooks/01_vector_add.ipynb` — a short walkthrough of the experiment.
-- `tests/test_vector_add.py` — correctness tests, including an input size that does not evenly divide into blocks.
-- `docs/roadmap.md` — planned learning and implementation stages.
-
-Vector addition is a starting point. It demonstrates Triton program indexing, masks for the final partial block, memory loads/stores, correctness checks, and basic GPU timing.
+| Notebook | Topic | Main learning goal |
+|---|---|---|
+| `00_vector_add.ipynb` | Vector addition | Triton programs, offsets, masks, correctness, basic GPU timing |
+| `01_matrix_multiplication.ipynb` | Tiled matrix multiplication | 2D output tiles, accumulation, data reuse, partial tiles |
+| `02_memory_and_block_tuning.ipynb` | Memory/performance analysis | Controlled block-size experiment and estimated effective bandwidth |
+| `03_fused_softmax_layernorm.ipynb` | Fused operations | Reductions, numerical stability, fewer intermediate writes |
+| `04_attention_flashattention_concepts.ipynb` | Attention | Online softmax and tiled attention inspired by FlashAttention |
+| `05_cuda_cpp_comparison.ipynb` | CUDA C++ comparison | CUDA thread/block indexing, extension compilation, correctness and timing |
 
 ## Run in Google Colab
 
-1. Open Google Colab and select **Runtime → Change runtime type → GPU**.
-2. Clone your GitHub repository. Replace the URL below with your repository URL:
+1. Upload the repository to GitHub or download and extract it.
+2. Open a notebook in Colab.
+3. Select **Runtime → Change runtime type → GPU**.
+4. Run cells from top to bottom.
+5. Record the GPU name, PyTorch/Triton versions, input sizes, correctness outcome, and timing results.
 
-   ```python
-   !git clone https://github.com/<your-username>/triton-lab.git
-   %cd triton-lab
-   ```
+Colab images change over time. The first cell of each notebook prints the installed software versions. Avoid changing the PyTorch/CUDA toolchain unless a dependency is actually missing and you have checked compatibility. The CUDA C++ extension notebook also needs `nvcc`; it reports when the compiler is unavailable.
 
-3. Check that PyTorch can access the GPU and that Triton is available:
+## Benchmarking notes
 
-   ```python
-   import torch
-   import triton
+- Warm-up calls are used before timing.
+- CUDA events measure work on the GPU execution timeline, and the ending event is synchronized before reading elapsed time.
+- Several rounds are measured; the median is reported to reduce the influence of outliers.
+- Outputs are checked against a PyTorch reference before performance is discussed.
+- Very short kernels can be sensitive to launch overhead, queueing, clock changes, and other processes. Treat these introductory measurements as comparisons under one stated setup, not universal rankings.
+- Effective bandwidth is estimated from the operation's expected input/output bytes. It is not a hardware-counter measurement of DRAM traffic.
 
-   print("PyTorch:", torch.__version__)
-   print("Triton:", triton.__version__)
-   print("CUDA available:", torch.cuda.is_available())
-   if torch.cuda.is_available():
-       print("GPU:", torch.cuda.get_device_name(0))
-   ```
+## Project status
 
-   If either import fails, check the packages installed in the current runtime and use versions compatible with each other. Avoid replacing working packages without checking compatibility.
+The six notebooks form a complete learning path, but the project should not be described as fully validated until the notebooks have been run on a GPU and their correctness/tests and measurements have been reviewed. No benchmark results are pre-filled in this repository.
 
-4. Run the correctness tests and benchmark from the repository root:
+## Suggested work order
 
-   ```python
-   !python -m unittest discover -s tests -v
-   !python benchmarks/bench_vector_add.py
-   ```
-
-5. Open `notebooks/01_vector_add.ipynb` for the walkthrough.
-
-The current example supports one-dimensional, contiguous CUDA tensors with matching shapes and `float32` dtype.
-
-## Benchmarking method
-
-The benchmark follows these steps:
-
-1. Warm up both implementations so initial setup and Triton compilation are excluded from steady-state timing.
-2. Check that the PyTorch and Triton outputs agree within a numerical tolerance.
-3. Record CUDA events around repeated calls, then wait for the ending event.
-4. Divide the measured duration by the number of calls to estimate time per call.
-5. Repeat the measurement and report the median to reduce sensitivity to an unusually high or low sample.
-
-The output buffers are allocated before timing. Results depend on the GPU, library versions, input size, kernel launch overhead, and runtime conditions. A faster result in one test does not establish a universal speed advantage.
-
-The reported bandwidth is an **algorithmic estimate**, assuming 12 bytes of data movement per `float32` element (two 4-byte reads and one 4-byte write). It is not a direct measurement of physical DRAM traffic.
-
-To save a benchmark result as CSV, run:
-
-```python
-!python benchmarks/bench_vector_add.py --save
-```
-
-This creates `results/vector_add_benchmark.csv`. Run the benchmark yourself before committing a results file, and include the GPU and software versions when reporting results. Do not add sample or fabricated performance numbers to the repository.
-
-## Roadmap
-
-1. **Vector addition** — indexing, masks, correctness, and basic timing.
-2. **Matrix multiplication** — two-dimensional indexing, tiling, data reuse, and comparison with `torch.matmul`.
-3. **GPU performance analysis** — memory coalescing, registers, occupancy, effective bandwidth, and block-size experiments.
-4. **Fused softmax and layer normalization** — reductions and reducing intermediate memory traffic.
-5. **Attention** — tiled attention and the ideas behind FlashAttention, validated against a reference implementation.
-6. **CUDA C++ comparison** — implement a small equivalent kernel and compare correctness and performance under the same conditions.
-7. **Inference systems** — explore KV-cache quantization (FlexKV) and paged KV-cache allocation (PagedKV) as separate follow-on projects.
-
-For each stage, keep a correct baseline, change one factor at a time, record repeatable measurements, and document both results and limitations.
+1. Complete and understand vector addition.
+2. Complete matrix multiplication and verify partial-tile handling.
+3. Record a block-size tuning table and explain the trend.
+4. Verify softmax and layer normalization against PyTorch.
+5. Explain the online-softmax attention algorithm and its limitations.
+6. Build the CUDA extension when the environment supports it and compare all three paths.
 
 ## References
 
-- [Triton tutorials](https://triton-lang.org/main/getting-started/tutorials/)
+- [Triton documentation and tutorials](https://triton-lang.org/main/getting-started/tutorials/)
 - [Triton matrix multiplication tutorial](https://triton-lang.org/main/getting-started/tutorials/03-matrix-multiplication.html)
+- [FlashAttention paper](https://arxiv.org/abs/2205.14135)
+- [PyTorch CUDA semantics](https://pytorch.org/docs/stable/notes/cuda.html)
 - [CUDA C++ Best Practices Guide](https://docs.nvidia.com/cuda/cuda-c-best-practices-guide/index.html)
 - [Nsight Compute Profiling Guide](https://docs.nvidia.com/nsight-compute/ProfilingGuide/)
 
-## Status
+## Notes
 
-The vector-add implementation, test, notebook, and benchmark script are included. Performance conclusions remain open until results have been collected and documented on a real GPU runtime.
+Use this repository as an experiment log. Keep measured outputs, source changes, and conclusions traceable. Do not claim speedups without including the machine/runtime and benchmark method.
