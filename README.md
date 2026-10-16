@@ -1,51 +1,61 @@
 # Triton-Lab
 
-A small collection of GPU-kernel experiments focused on correctness, benchmarking, and understanding performance. The notebooks are meant to be run in order in Google Colab with a GPU runtime.
+**A hands-on GPU-kernel learning project using PyTorch, Triton, and CUDA C++.**
 
-This repository does **not** assume a custom kernel is faster than a framework implementation. Each comparison should be verified on the stated hardware and software versions.
+Triton-Lab contains six executed Google Colab notebooks, a reusable vector-add implementation, a small test suite, a benchmark script, and recorded experiments. The goal is to learn how GPU kernels are written, checked, measured, and profiled—not to claim that every custom kernel beats a framework implementation.
 
-## Notebooks
+## Project contents
 
-| Notebook | Topic | Main learning goal |
+| Notebook | Topic | What it demonstrates |
 |---|---|---|
-| `00_vector_add.ipynb` | Vector addition | Triton programs, offsets, masks, correctness, basic GPU timing |
-| `01_matrix_multiplication.ipynb` | Tiled matrix multiplication | 2D output tiles, accumulation, data reuse, partial tiles |
-| `02_memory_and_block_tuning.ipynb` | Memory/performance analysis | Controlled block-size experiment and estimated effective bandwidth |
-| `03_fused_softmax_layernorm.ipynb` | Fused operations | Reductions, numerical stability, fewer intermediate writes |
-| `04_attention_flashattention_concepts.ipynb` | Attention | Online softmax and tiled attention inspired by FlashAttention |
-| `05_cuda_cpp_comparison.ipynb` | CUDA C++ comparison | CUDA thread/block indexing, extension compilation, correctness and timing |
+| [00 — Vector addition](notebooks/00_vector_add.ipynb) | Triton basics | Program IDs, offsets, masks, loads/stores, correctness, timing, and `torch.profiler` |
+| [01 — Matrix multiplication](notebooks/01_matrix_multiplication.ipynb) | Tiled computation | 2D indexing, accumulation, tile sizes, and data reuse |
+| [02 — Memory and block tuning](notebooks/02_memory_and_block_tuning.ipynb) | Performance tuning | Block-size sweep and estimated effective bandwidth |
+| [03 — Softmax and LayerNorm](notebooks/03_fused_softmax_layernorm.ipynb) | Neural-network primitives | Reductions, numerical stability, normalization, and reference checks |
+| [04 — Attention](notebooks/04_attention_flashattention_concepts.ipynb) | Online softmax | Tiled attention inspired by FlashAttention; a learning prototype, not a production replacement |
+| [05 — CUDA C++ comparison](notebooks/05_cuda_cpp_comparison.ipynb) | Programming models | Compare PyTorch, Triton, and a compiled CUDA C++ vector-add extension |
+
+Supporting files:
+
+- `src/triton_lab/vector_add.py` — reusable vector-add implementation
+- `tests/test_vector_add.py` — correctness tests for empty input and a partial final block
+- `benchmarks/bench_vector_add.py` — standalone vector-add benchmark
+- [`results/README.md`](results/README.md) — actual recorded measurements and caveats
+- [`docs/roadmap.md`](docs/roadmap.md) — learning roadmap and possible follow-on projects
 
 ## Run in Google Colab
 
-1. Upload the repository to GitHub or download and extract it.
-2. Open a notebook in Colab.
-3. Select **Runtime → Change runtime type → GPU**.
-4. Run cells from top to bottom.
-5. Record the GPU name, PyTorch/Triton versions, input sizes, correctness outcome, and timing results.
+No local CUDA installation is required. Use a Colab GPU runtime.
 
-Colab images change over time. The first cell of each notebook prints the installed software versions. Avoid changing the PyTorch/CUDA toolchain unless a dependency is actually missing and you have checked compatibility. The CUDA C++ extension notebook also needs `nvcc`; it reports when the compiler is unavailable.
+1. Open a notebook above in GitHub and choose **Open in Colab**, or open Colab and upload the notebook.
+2. In Colab, select **Runtime → Change runtime type → GPU**.
+3. Run cells from top to bottom. The notebooks print the software versions and GPU detected by the runtime.
+4. Keep the executed notebook if you want its outputs to be visible to reviewers. Colab's `/content` directory is temporary; save notebooks to Drive or download them before ending the runtime.
 
-## Benchmarking notes
+For the CUDA C++ comparison, the runtime must provide a compatible CUDA compiler (`nvcc`). The notebook records the compiler and extension build information. Colab runtimes and their installed toolchains can change over time.
 
-- Warm-up calls are used before timing.
-- CUDA events measure work on the GPU execution timeline, and the ending event is synchronized before reading elapsed time.
-- Several rounds are measured; the median is reported to reduce the influence of outliers.
-- Outputs are checked against a PyTorch reference before performance is discussed.
-- Very short kernels can be sensitive to launch overhead, queueing, clock changes, and other processes. Treat these introductory measurements as comparisons under one stated setup, not universal rankings.
-- Effective bandwidth is estimated from the operation's expected input/output bytes. It is not a hardware-counter measurement of DRAM traffic.
+## Automated tests
+
+Run from the repository root in a Python environment with compatible PyTorch, Triton, and CUDA support:
+
+```bash
+python -m unittest discover -s tests -p "test_*.py" -v
+```
+
+**Recorded test result:** 2 tests ran and passed in the Colab session used for this project. The tests cover empty input and a vector length that is not divisible by the block size. They are skipped when CUDA is unavailable, so check the test output rather than treating every successful process exit as proof that GPU tests ran.
+
+## How to interpret the benchmarks
+
+- Correctness is checked against PyTorch before timing is discussed.
+- The notebooks use warm-up and repeated measurements; exact timing can vary with GPU model, runtime state, clocks, and software versions.
+- Very small operations can be dominated by launch overhead.
+- Estimated effective bandwidth is calculated from expected input/output bytes. It is not a hardware-counter measurement of DRAM traffic.
+- The attention result compares the Triton prototype with the notebook's simple PyTorch reference, not with every optimized attention implementation.
+- Profiler timings are diagnostic and include instrumentation overhead. Do not compare them as if they were clean benchmark timings.
 
 ## Project status
 
-The six notebooks form a complete learning path, but the project should not be described as fully validated until the notebooks have been run on a GPU and their correctness/tests and measurements have been reviewed. No benchmark results are pre-filled in this repository.
-
-## Suggested work order
-
-1. Complete and understand vector addition.
-2. Complete matrix multiplication and verify partial-tile handling.
-3. Record a block-size tuning table and explain the trend.
-4. Verify softmax and layer normalization against PyTorch.
-5. Explain the online-softmax attention algorithm and its limitations.
-6. Build the CUDA extension when the environment supports it and compare all three paths.
+The core notebook path has been executed in Google Colab, the profiler example has produced a trace/table, and the two repository unit tests passed in the reported session. Recorded results are summarized in [`results/README.md`](results/README.md). These are learning experiments on a Tesla T4 with the software versions recorded in the notebooks, not a broad hardware evaluation or a production kernel library.
 
 ## References
 
@@ -54,8 +64,3 @@ The six notebooks form a complete learning path, but the project should not be d
 - [FlashAttention paper](https://arxiv.org/abs/2205.14135)
 - [PyTorch CUDA semantics](https://pytorch.org/docs/stable/notes/cuda.html)
 - [CUDA C++ Best Practices Guide](https://docs.nvidia.com/cuda/cuda-c-best-practices-guide/index.html)
-- [Nsight Compute Profiling Guide](https://docs.nvidia.com/nsight-compute/ProfilingGuide/)
-
-## Notes
-
-Use this repository as an experiment log. Keep measured outputs, source changes, and conclusions traceable. Do not claim speedups without including the machine/runtime and benchmark method.
